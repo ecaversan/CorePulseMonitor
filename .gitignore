@@ -1,0 +1,30 @@
+# Python / Ambientes Virtuais
+.venv/
+venv/
+env/
+ENV/
+
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Capturas locais e fotos do usuário
+capturas/*
+!capturas/.gitkeep
+faces_conhecidas/*
+!faces_conhecidas/.gitkeep
+
+# Modelos DNN pesados (baixados automaticamente na 1ª execução)
+modelos/
+
+# IDEs e Sistema Operacional
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+ehthumbs.db
+Desktop.ini
