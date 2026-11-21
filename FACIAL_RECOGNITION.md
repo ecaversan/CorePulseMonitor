@@ -1,6 +1,6 @@
 # 🎥 Monitor de Reconhecimento Facial — `monitor-video.py`
 
-Script Python para detecção e reconhecimento facial em tempo real usando a câmera do computador, integrado ao projeto **CorePulseMonitor**.
+Script Python para detecção e reconhecimento facial em tempo real com **aceleração por GPU**, integrado ao projeto **CorePulseMonitor**.
 
 ---
 
@@ -8,16 +8,17 @@ Script Python para detecção e reconhecimento facial em tempo real usando a câ
 
 ### Obrigatórias
 
-| Pacote | Uso |
-|---|---|
-| `opencv-python` | Captura de vídeo e detecção de rostos |
-| `numpy` | Operações matriciais (instalado junto com o OpenCV) |
+| Pacote | Versão Recomendada | Uso |
+|---|---|---|
+| `opencv-python` | `4.10.0.84` | Captura de vídeo, inferência da rede neural DNN e renderização |
+| `numpy` | `>= 2.0.0` | Operações matriciais e manipulação de tensores |
 
-### Opcionais
+### Opcionais (Identificação por Nome)
 
-| Pacote | Uso |
-|---|---|
-| `face_recognition` | Identificação de pessoas cadastradas |
+| Pacote | Versão | Uso |
+|---|---|---|
+| `setuptools` | `< 70.0.0` | Compatibilidade com `pkg_resources` exigida pelos modelos do `face_recognition` |
+| `face_recognition` | `>= 1.3.0` | Identificação biométrica de pessoas cadastradas via `dlib` |
 
 ---
 
@@ -33,73 +34,79 @@ cd d:\git\repos\CorePulseMonitor
 ### 2. Instalar dependências obrigatórias
 
 ```powershell
-pip install opencv-python
+pip install opencv-python==4.10.0.84 numpy
 ```
 
 ### 3. Instalar identificação de pessoas (opcional)
 
 ```powershell
+pip install "setuptools<70"
 pip install face_recognition
 ```
 
 > [!WARNING]
-> No **Windows**, o pacote `face_recognition` depende do `dlib`, que requer compilação nativa.
-> Certifique-se de ter o **Visual C++ Build Tools** instalado antes de prosseguir.
-> Alternativa: use o pacote pré-compilado `pip install face_recognition-whl` ou execute via **WSL**.
+> No **Windows**, o pacote `face_recognition` depende do `dlib`. É necessário ter o **Visual C++ Build Tools** instalado (ou utilizar pacotes pré-compilados como `face_recognition-whl`). O `setuptools<70` é essencial para evitar erros de inicialização dos modelos no Python 3.12+.
 
 ---
 
-## ▶️ Como executar
+## ▶️ Como Executar
 
+Com o ambiente ativado:
 ```powershell
-.\.venv\Scripts\python.exe monitor-video.py
+python monitor-video.py
 ```
+*(Ou diretamente pelo executável: `.\.venv\Scripts\python.exe monitor-video.py`)*
+
+> [!NOTE]
+> Na primeira execução, o script baixará automaticamente os pesos da rede neural (~10 MB) para a pasta `modelos/`.
 
 ---
 
-## 🎮 Teclas durante a execução
+## 🎮 Teclas de Atalho
 
 | Tecla | Ação |
 |---|---|
-| `Q` ou `Esc` | Encerrar o programa |
-| `C` | Capturar o frame atual e salvar em `./capturas/` |
+| `Q` ou `Esc` | Encerrar a aplicação |
+| `G` | **Alternar entre GPU e CPU** em tempo real para inferência do modelo |
+| `C` | Capturar o frame atual e salvar foto em `./capturas/` |
 | `F` | Alternar exibição do contador de FPS |
 
 ---
 
-## 🧠 Como funciona
+## 🧠 Como Funciona
 
-### Modos de operação
+### Motores de Detecção
+1. **DNN (SSD + ResNet-10) [Padrão]:** 
+   - Rede neural de alta precisão que detecta faces mesmo em ângulos difíceis ou sob iluminação variável.
+   - Suporta aceleração via hardware (**GPU NVIDIA via OpenCL / DirectX NVD3D11** ou CUDA).
+   - Exibe a porcentagem de confiança da detecção facial (ex: `98%`).
+2. **Haar Cascade [Fallback Automático]:** 
+   - Utilizado como plano de contingência caso os arquivos do modelo DNN não possam ser baixados.
 
-```
-Sem face_recognition          Com face_recognition
-─────────────────────         ──────────────────────────────────
-Detecção de rostos            Detecção + Identificação de pessoas
-Retângulo verde               Retângulo amarelo (pessoa conhecida)
-Exibe contador de rostos      Exibe nome cadastrado no rótulo
-Nenhuma instalação extra      Requer dlib + imagens cadastradas
-```
-
-### Pipeline de processamento
+### Pipeline de Processamento
 
 ```
-Camera → Frame BGR → Escala de Cinza → Haar Cascade → Retângulos
-                   ↘ RGB (opcional) → face_recognition → Nome da pessoa
+Webcam (1280x720)
+       │
+       ▼
+Blob DNN (300x300) ──► GPU / OpenCL (SSD + ResNet-10) ──► Caixas Delimitadoras + Confiança
+       │
+       ▼ (A cada 2 frames se houver rostos e face_recognition ativo)
+Extração de Encodings (128D) ──► Comparação com faces conhecidas ──► Nome Identificado
 ```
 
 ---
 
-## 👤 Cadastrar pessoas para identificação
+## 👤 Cadastrar Pessoas para Identificação
 
 > [!NOTE]
-> Esta funcionalidade só está disponível com o pacote `face_recognition` instalado.
+> Esta funcionalidade exige o pacote `face_recognition` instalado.
 
-1. Crie a pasta `faces_conhecidas/` na raiz do projeto (criada automaticamente na primeira execução).
-2. Adicione fotos no formato `.jpg`, `.jpeg`, `.png`, `.bmp` ou `.webp`.
-3. **O nome do arquivo se torna o rótulo exibido na tela.**
+1. Insira imagens (`.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`) dentro da pasta `faces_conhecidas/`.
+2. **O nome do arquivo será usado como o rótulo exibido na tela.**
+   * Exemplo: `faces_conhecidas/carlos.jpg` exibirá `carlos (97%)`.
 
-**Exemplo de estrutura:**
-
+**Estrutura recomendada:**
 ```
 CorePulseMonitor/
 └── faces_conhecidas/
@@ -109,48 +116,51 @@ CorePulseMonitor/
 ```
 
 > [!TIP]
-> Use fotos com boa iluminação e apenas **um rosto por imagem** para melhor precisão.
-> Quanto mais fotos por pessoa, maior a acurácia do reconhecimento.
+> Para maior acurácia, utilize fotos nítidas, com boa iluminação e contendo apenas o rosto da pessoa.
 
 ---
 
-## 🗂️ Estrutura de pastas gerada
+## 🗂️ Estrutura de Pastas do Módulo
 
 ```
 CorePulseMonitor/
-├── monitor-video.py       ← Script principal
-├── faces_conhecidas/      ← Fotos para cadastro (criada automaticamente)
-└── capturas/              ← Frames salvos com a tecla C (criada automaticamente)
+├── monitor-video.py       ← Script de monitoramento e visão computacional
+├── modelos/               ← Pesos do modelo SSD ResNet (baixados automaticamente)
+│   ├── deploy.prototxt
+│   └── res10_300x300_ssd_iter_140000.caffemodel
+├── faces_conhecidas/      ← Fotos das pessoas cadastradas
+└── capturas/              ← Fotos salvas ao pressionar a tecla C
 ```
 
 ---
 
-## ⚙️ Configurações avançadas
+## ⚙️ Configurações Avançadas
 
-As configurações ficam no topo do arquivo `monitor-video.py` e podem ser ajustadas conforme necessário:
+Parâmetros ajustáveis no topo do arquivo [monitor-video.py](file:///d:/git/repos/CorePulseMonitor/monitor-video.py):
 
-| Variável | Padrão | Descrição |
+| Constante | Padrão | Descrição |
 |---|---|---|
-| `INDICE_CAMERA` | `0` | Índice da câmera (0 = padrão; 1, 2... para câmeras externas) |
-| `ESCALA_DETECCAO` | `1.1` | `scaleFactor` do Haar Cascade (menor = mais detecções, mais lento) |
-| `VIZINHOS_MIN` | `5` | `minNeighbors` (maior = menos falsos positivos) |
-| `TAMANHO_MIN_ROSTO` | `(60, 60)` | Tamanho mínimo de rosto detectado (px) |
-| `TOLERANCIA_FR` | `0.55` | Limiar de similaridade para identificação (menor = mais rigoroso) |
+| `INDICE_CAMERA` | `0` | Índice do dispositivo de captura (0 = câmera integrada) |
+| `CONFIANCA_MIN` | `0.5` | Limiar mínimo de confiança da rede DNN para aceitar um rosto (0.0 a 1.0) |
+| `TOLERANCIA_FR` | `0.55` | Distância euclidiana máxima para identificação facial (menor = mais rigoroso) |
+| `PASTA_MODELOS` | `"modelos"` | Diretório de armazenamento dos arquivos da rede neural |
+| `PASTA_FACES` | `"faces_conhecidas"` | Diretório de origem das fotos cadastradas |
+| `PASTA_CAPTURAS` | `"capturas"` | Diretório de destino das fotos salvas via tecla `C` |
 
 ---
 
-## 🛠️ Solução de problemas
+## 🛠️ Solução de Problemas
 
-| Sintoma | Possível causa | Solução |
+| Sintoma | Causa Provável | Solução |
 |---|---|---|
-| `Erro: câmera não encontrada` | Câmera em uso ou índice errado | Feche outros apps; tente `INDICE_CAMERA = 1` |
-| Muitos falsos positivos | `VIZINHOS_MIN` muito baixo | Aumente para `7` ou `8` |
-| Reconhecimento impreciso | Foto de baixa qualidade | Use foto com boa iluminação e rosto centralizado |
-| `face_recognition` não instala | Falta do `dlib` / Build Tools | Instale Visual C++ Build Tools ou use WSL |
-| FPS muito baixo | Resolução alta + CPU lenta | Reduza a resolução no `cap.set(...)` para `640x480` |
+| `Erro: câmera 0 não encontrada` | Câmera ocupada ou índice incorreto | Feche outros aplicativos ou mude `INDICE_CAMERA = 1` |
+| `face_recognition` com erro de `pkg_resources` | Versão nova do `setuptools` | Execute: `pip install "setuptools<70"` |
+| Backend GPU cai em `CPU` | Driver de vídeo desatualizado | Atualize o driver da GPU NVIDIA para suportar OpenCL / Direct3D11 |
+| Falha no download do modelo DNN | Bloqueio de rede ou firewall | Baixe manualmente os arquivos das URLs presentes no topo do script para a pasta `modelos/` |
+| Falso positivo / detecções indesejadas | Confiança muito permissiva | Aumente `CONFIANCA_MIN` para `0.65` ou `0.7` |
 
 ---
 
 ## 📄 Licença
 
-Parte do projeto **CorePulseMonitor**.
+Módulo integrante do projeto **CorePulseMonitor**.
